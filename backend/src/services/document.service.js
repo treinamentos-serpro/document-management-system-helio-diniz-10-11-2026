@@ -1,5 +1,3 @@
-const path = require('node:path');
-const config = require('../config');
 const documentRepository = require('../repositories/document.repository');
 
 // Erro de regra de negócio; o controller traduz o código para status HTTP.
@@ -9,12 +7,6 @@ class DocumentError extends Error {
     this.name = 'DocumentError';
     this.code = code;
   }
-}
-
-// Remove o nome interno do armazenamento da resposta pública.
-function toPublicDocument(document) {
-  const { storedName, ...publicFields } = document;
-  return publicFields;
 }
 
 // O nome físico do arquivo é o próprio id gerado pelo multer (RNF-06).
@@ -36,11 +28,11 @@ function createDocument({ file, owner }) {
   };
 
   documentRepository.save(document);
-  return toPublicDocument(document);
+  return document;
 }
 
 function listDocumentsByOwner(owner) {
-  return documentRepository.findByOwner(owner).map(toPublicDocument);
+  return documentRepository.findByOwner(owner);
 }
 
 function getDownloadInfo(id, owner) {
@@ -50,7 +42,7 @@ function getDownloadInfo(id, owner) {
   }
 
   return {
-    filePath: path.join(config.storageDir, document.storedName),
+    storedName: document.storedName,
     originalName: document.originalName,
   };
 }

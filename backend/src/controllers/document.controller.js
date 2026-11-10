@@ -1,7 +1,7 @@
-const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 const multer = require('multer');
 const config = require('../config');
+const storageRepository = require('../repositories/storage.repository');
 const documentService = require('../services/document.service');
 const { DocumentError } = documentService;
 
@@ -16,9 +16,7 @@ const STATUS_BY_ERROR_CODE = {
 // Armazenamento local com diskStorage; o nome físico é um UUID, nunca o nome enviado.
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (req, file, callback) => {
-      fs.mkdir(config.storageDir, { recursive: true }, (error) => callback(error, config.storageDir));
-    },
+    destination: (req, file, callback) => storageRepository.prepareDirectory(callback),
     filename: (req, file, callback) => callback(null, randomUUID()),
   }),
   limits: { fileSize: config.maxUploadSizeBytes },
@@ -50,10 +48,13 @@ function sendUploadError(res, error) {
   return sendError(res, 500, INTERNAL_ERROR_MESSAGE);
 }
 
+function toPublicDocument(document) {
+  const { storedName, ...publicFields } = document;
+  return publicFields;
+}
+
 function removeUploadedFile(file) {
-  if (file) {
-    fs.unlink(file.path, () => {});
-  }
+  storageRepository.removeUploadedFile(file);
 }
 
 function uploadDocument(req, res) {
@@ -69,7 +70,7 @@ function uploadDocument(req, res) {
 
     try {
       const document = documentService.createDocument({ file: req.file, owner });
-      return res.status(201).json(document);
+      return res.status(201).json(toPublicDocument(document));
     } catch (error) {
       removeUploadedFile(req.file);
       return sendServiceError(res, error);
@@ -83,7 +84,7 @@ function listDocuments(req, res) {
     return sendError(res, 400, MISSING_USER_MESSAGE);
   }
 
-  return res.json(documentService.listDocumentsByOwner(owner));
+  return res.json(documentService.listDocumentsByOwner(owner).map(toPublicDocument));
 }
 
 function downloadDocument(req, res) {
@@ -93,13 +94,15 @@ function downloadDocument(req, res) {
   }
 
   let downloadInfo;
+  let filePath;
   try {
     downloadInfo = documentService.getDownloadInfo(req.params.id, owner);
+    filePath = storageRepository.getFilePath(downloadInfo.storedName);
   } catch (error) {
     return sendServiceError(res, error);
   }
 
-  return res.download(downloadInfo.filePath, downloadInfo.originalName, (error) => {
+  return res.download(filePath, downloadInfo.originalName, (error) => {
     if (!error || res.headersSent) {
       return;
     }
