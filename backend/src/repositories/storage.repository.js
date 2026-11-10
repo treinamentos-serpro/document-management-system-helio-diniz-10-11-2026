@@ -20,8 +20,8 @@ function getFilePath(storedName) {
 }
 
 function removeUploadedFile(file) {
-  if (file) {
-    fs.unlink(file.path, () => {});
+  if (file?.filename) {
+    fs.unlink(getFilePath(file.filename), () => {});
   }
 }
 
